@@ -73,7 +73,7 @@ class _MyHomePageState extends State<MyHomePage> {
       
       if (!await File(assetPath).exists()) {
         // Fallback for development mode or different directory structure
-        assetPath = '/usr/share/sounds/alsa/Front_Center.wav';
+        assetPath = 'assets/sounds/notification.wav';
       }
 
       await Process.run('aplay', [assetPath]);
