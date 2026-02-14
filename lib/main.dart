@@ -46,7 +46,8 @@ class _MyHomePageState extends State<MyHomePage> {
       if (await file.exists()) {
         final lines = await file.readAsLines();
         for (var line in lines) {
-          if (line.startsWith('PRETTY_NAME=') || line.startsWith('VERSION_ID=')) {
+          if (line.startsWith('PRETTY_NAME=') ||
+              line.startsWith('VERSION_ID=')) {
             setState(() {
               _aglVersion = line.split('=')[1].replaceAll('"', '');
             });
@@ -69,11 +70,12 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       // For Flutter Linux, assets are located relative to the executable.
       // We try to find the asset path or fallback to a common system sound.
-      String assetPath = '${File(Platform.resolvedExecutable).parent.path}/data/flutter_assets/assets/sounds/notification.wav';
-      
+      String assetPath =
+          '${File(Platform.resolvedExecutable).parent.path}/data/flutter_assets/assets/sounds/notification.wav';
+
       if (!await File(assetPath).exists()) {
         // Fallback for development mode or different directory structure
-        assetPath = 'assets/sounds/notification.wav';
+        assetPath = '/usr/share/sounds/alsa/Front_Center.wav';
       }
 
       await Process.run('aplay', [assetPath]);
@@ -115,10 +117,7 @@ class _MyHomePageState extends State<MyHomePage> {
               if (_showPicture)
                 Padding(
                   padding: const EdgeInsets.all(20.0),
-                  child: Image.asset(
-                    'assets/images/welcome.png',
-                    height: 200,
-                  ),
+                  child: Image.asset('assets/images/welcome.png', height: 200),
                 ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
