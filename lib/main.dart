@@ -119,7 +119,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 'Antigravity',
                 style: TextStyle(fontSize: 24, fontStyle: FontStyle.italic),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
+              const Text(
+                'App Version: 1.0.0+1',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
               if (_showPicture)
                 Padding(
                   padding: const EdgeInsets.all(20.0),
