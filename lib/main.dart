@@ -35,6 +35,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String _aglVersion = 'Unknown';
   bool _showPicture = false;
   late AudioPlayer _audioPlayer;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -77,9 +78,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _playSound() async {
     try {
+      setState(() {
+        _errorMessage = '';
+      });
       await _audioPlayer.play(AssetSource('sounds/notification.wav'));
     } catch (e) {
       debugPrint('Audio playback error: $e');
+      setState(() {
+        _errorMessage = 'Audio Error: $e';
+      });
     }
   }
 
@@ -117,6 +124,18 @@ class _MyHomePageState extends State<MyHomePage> {
                 Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Image.asset('assets/images/welcome.png', height: 200),
+                ),
+              if (_errorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: Text(
+                    _errorMessage,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
