@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 void main() {
   runApp(const MyApp());
@@ -33,11 +34,19 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String _aglVersion = 'Unknown';
   bool _showPicture = false;
+  late AudioPlayer _audioPlayer;
 
   @override
   void initState() {
     super.initState();
     _readAglVersion();
+    _audioPlayer = AudioPlayer();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
   }
 
   Future<void> _readAglVersion() async {
@@ -68,19 +77,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _playSound() async {
     try {
-      // For Flutter Linux, assets are located relative to the executable.
-      // We try to find the asset path or fallback to a common system sound.
-      String assetPath =
-          '${File(Platform.resolvedExecutable).parent.path}/data/flutter_assets/assets/sounds/notification.wav';
-
-      if (!await File(assetPath).exists()) {
-        // Fallback for development mode or different directory structure
-        assetPath = '/usr/share/sounds/alsa/Front_Center.wav';
-      }
-
-      await Process.run('aplay', [assetPath]);
+      await _audioPlayer.play(AssetSource('sounds/notification.wav'));
     } catch (e) {
-      debugPrint('Native audio error: $e');
+      debugPrint('Audio playback error: $e');
     }
   }
 
