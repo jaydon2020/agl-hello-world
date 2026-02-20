@@ -1,7 +1,6 @@
 import 'dart:io';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,15 +35,18 @@ class _MyHomePageState extends State<MyHomePage> {
   String _aglVersion = 'Unknown';
   bool _showPicture = false;
   String _errorMessage = '';
+  late AudioPlayer _audioPlayer;
 
   @override
   void initState() {
     super.initState();
+    _audioPlayer = AudioPlayer();
     _readAglVersion();
   }
 
   @override
   void dispose() {
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -80,49 +82,12 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     try {
-      // 1. Get the temporary directory
-      final Directory tempDir = await getTemporaryDirectory();
-      final File tempFile = File('${tempDir.path}/notification.wav');
-
-      // 2. Extract asset if it doesn't exist in temp
-      if (!await tempFile.exists()) {
-        debugPrint('Extracting asset to ${tempFile.path}');
-        try {
-          final ByteData data = await rootBundle.load(
-            'assets/sounds/notification.wav',
-          );
-          final List<int> bytes = data.buffer.asUint8List();
-          await tempFile.writeAsBytes(bytes);
-        } catch (e) {
-          debugPrint('Asset extraction failed: $e');
-          setState(() {
-            _errorMessage = 'Asset Error: $e';
-          });
-          return;
-        }
-      }
-
-      debugPrint('Playing sound from: ${tempFile.path}');
-
-      // 3. Play using gst-launch-1.0 (native command)
-      // We use playbin for easy playback of files
-      final ProcessResult result = await Process.run('gst-launch-1.0', [
-        'playbin',
-        'uri=file://${tempFile.path}',
-      ]);
-
-      if (result.exitCode != 0) {
-        debugPrint('gst-launch-1.0 failed: ${result.stderr}');
-        setState(() {
-          _errorMessage = 'GStreamer Error: ${result.stderr}';
-        });
-      } else {
-        debugPrint('Audio played successfully');
-      }
+      await _audioPlayer.play(AssetSource('sounds/notification.wav'));
+      debugPrint('Audio played successfully');
     } catch (e) {
-      debugPrint('Native audio error: $e');
+      debugPrint('Audio error: $e');
       setState(() {
-        _errorMessage = 'Native Error: $e';
+        _errorMessage = 'Audio Error: $e';
       });
     }
   }
