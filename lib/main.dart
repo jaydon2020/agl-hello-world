@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -82,7 +84,24 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     try {
-      await _audioPlayer.play(AssetSource('sounds/notification.wav'));
+      // 1. Resolve a writable temp path for the audio asset
+      final Directory tempDir = await getTemporaryDirectory();
+      final File tempFile = File('${tempDir.path}/notification.wav');
+
+      // 2. Extract the bundled asset into the temp file if not already done
+      if (!await tempFile.exists()) {
+        debugPrint('Extracting asset to ${tempFile.path}');
+        final ByteData data = await rootBundle.load(
+          'assets/sounds/notification.wav',
+        );
+        await tempFile.writeAsBytes(data.buffer.asUint8List());
+      }
+
+      debugPrint('Playing sound from: ${tempFile.path}');
+
+      // 3. Play from the absolute file path — works on AGL/Linux where
+      //    AssetSource cannot resolve the packaged bundle path at runtime.
+      await _audioPlayer.play(DeviceFileSource(tempFile.path));
       debugPrint('Audio played successfully');
     } catch (e) {
       debugPrint('Audio error: $e');
@@ -123,7 +142,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.0+2',
+                'App Version: 1.0.0+3',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
