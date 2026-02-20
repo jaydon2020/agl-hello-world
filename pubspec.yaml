@@ -89,3 +89,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+dependency_overrides:
+  audioplayers_linux:
+    git:
+      url: https://github.com/toyota-connected/ivi-homescreen-plugins.git
+      ref: v2.0
+      path: plugins/audioplayers_linux
