@@ -81,37 +81,44 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _playSound() async {
     setState(() {
-      _statusMessage = '';
+      _statusMessage = 'Preparing audio...';
       _isError = false;
     });
 
     try {
-      // 1. Resolve a writable temp path for the audio asset
+      debugPrint('Diagnostic: Getting temp directory...');
       final Directory tempDir = await getTemporaryDirectory();
       final File tempFile = File('${tempDir.path}/notification.wav');
 
-      // 2. Extract the bundled asset into the temp file if not already done
       if (!await tempFile.exists()) {
-        debugPrint('Extracting asset to ${tempFile.path}');
+        setState(() => _statusMessage = 'Extracting asset...');
+        debugPrint('Diagnostic: Extracting asset to ${tempFile.path}');
         final ByteData data = await rootBundle.load(
           'assets/sounds/notification.wav',
         );
         await tempFile.writeAsBytes(data.buffer.asUint8List());
       }
 
-      debugPrint('Playing sound from: ${tempFile.path}');
+      setState(() => _statusMessage = 'Playing audio...');
+      debugPrint('Diagnostic: Playing sound from: ${tempFile.path}');
 
-      // 3. Play from the absolute file path — works on AGL/Linux where
-      //    AssetSource cannot resolve the packaged bundle path at runtime.
-      await _audioPlayer.play(DeviceFileSource(tempFile.path));
-      debugPrint('Audio played successfully');
+      // 3. Play from the absolute file path with a timeout to catch hangs
+      await _audioPlayer
+          .play(DeviceFileSource(tempFile.path))
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              throw Exception('Audio playback timed out after 5 seconds');
+            },
+          );
 
+      debugPrint('Diagnostic: Audio played successfully');
       setState(() {
         _statusMessage = 'Audio played successfully';
         _isError = false;
       });
     } catch (e) {
-      debugPrint('Audio error: $e');
+      debugPrint('Diagnostic: Audio error: $e');
       setState(() {
         _statusMessage = 'Audio Error: $e';
         _isError = true;
@@ -150,7 +157,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.0+4',
+                'App Version: 1.0.0+5',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
