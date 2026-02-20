@@ -36,7 +36,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String _aglVersion = 'Unknown';
   bool _showPicture = false;
-  String _errorMessage = '';
+  String _statusMessage = '';
+  bool _isError = false;
   late AudioPlayer _audioPlayer;
 
   @override
@@ -80,7 +81,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _playSound() async {
     setState(() {
-      _errorMessage = '';
+      _statusMessage = '';
+      _isError = false;
     });
 
     try {
@@ -103,10 +105,16 @@ class _MyHomePageState extends State<MyHomePage> {
       //    AssetSource cannot resolve the packaged bundle path at runtime.
       await _audioPlayer.play(DeviceFileSource(tempFile.path));
       debugPrint('Audio played successfully');
+
+      setState(() {
+        _statusMessage = 'Audio played successfully';
+        _isError = false;
+      });
     } catch (e) {
       debugPrint('Audio error: $e');
       setState(() {
-        _errorMessage = 'Audio Error: $e';
+        _statusMessage = 'Audio Error: $e';
+        _isError = true;
       });
     }
   }
@@ -142,7 +150,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.0+3',
+                'App Version: 1.0.0+4',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
@@ -151,13 +159,13 @@ class _MyHomePageState extends State<MyHomePage> {
                   padding: const EdgeInsets.all(20.0),
                   child: Image.asset('assets/images/welcome.png', height: 200),
                 ),
-              if (_errorMessage.isNotEmpty)
+              if (_statusMessage.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: Text(
-                    _errorMessage,
-                    style: const TextStyle(
-                      color: Colors.red,
+                    _statusMessage,
+                    style: TextStyle(
+                      color: _isError ? Colors.red : Colors.green,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
