@@ -86,25 +86,13 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     try {
-      debugPrint('Diagnostic: Getting temp directory...');
-      final Directory tempDir = await getTemporaryDirectory();
-      final File tempFile = File('${tempDir.path}/notification.wav');
-
-      if (!await tempFile.exists()) {
-        setState(() => _statusMessage = 'Extracting asset...');
-        debugPrint('Diagnostic: Extracting asset to ${tempFile.path}');
-        final ByteData data = await rootBundle.load(
-          'assets/sounds/notification.wav',
-        );
-        await tempFile.writeAsBytes(data.buffer.asUint8List());
-      }
-
+      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
       setState(() => _statusMessage = 'Playing audio...');
-      debugPrint('Diagnostic: Playing sound from: ${tempFile.path}');
+      debugPrint('Diagnostic: Playing sound from: $filePath');
 
-      // 3. Play from the absolute file path with a timeout to catch hangs
+      // Play from the absolute file path with a timeout to catch hangs
       await _audioPlayer
-          .play(DeviceFileSource(tempFile.path))
+          .play(DeviceFileSource(filePath))
           .timeout(
             const Duration(seconds: 5),
             onTimeout: () {

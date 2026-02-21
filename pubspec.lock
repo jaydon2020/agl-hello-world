@@ -36,8 +36,8 @@ packages:
   audioplayers_linux:
     dependency: "direct overridden"
     description:
-      path: "/home/jd-msi/my_ws/audioplayers_linux_agl"
-      relative: false
+      path: "plugins/audioplayers_linux_agl"
+      relative: true
     source: path
     version: "4.2.1"
   audioplayers_platform_interface:
