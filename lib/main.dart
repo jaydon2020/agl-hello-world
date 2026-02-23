@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -79,18 +78,17 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Future<void> _playSound() async {
+  Future<void> _playSoundAudioPlayers() async {
     setState(() {
-      _statusMessage = 'Preparing audio...';
+      _statusMessage = 'Audioplayers: Preparing audio...';
       _isError = false;
     });
 
     try {
       final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      setState(() => _statusMessage = 'Playing audio...');
+      setState(() => _statusMessage = 'Audioplayers: Playing audio...');
       debugPrint('Diagnostic: Playing sound from: $filePath');
 
-      // Play from the absolute file path with a timeout to catch hangs
       await _audioPlayer
           .play(DeviceFileSource(filePath))
           .timeout(
@@ -102,13 +100,103 @@ class _MyHomePageState extends State<MyHomePage> {
 
       debugPrint('Diagnostic: Audio played successfully');
       setState(() {
-        _statusMessage = 'Audio played successfully';
+        _statusMessage = 'Audioplayers: Audio played successfully';
         _isError = false;
       });
     } catch (e) {
       debugPrint('Diagnostic: Audio error: $e');
       setState(() {
-        _statusMessage = 'Audio Error: $e';
+        _statusMessage = 'Audioplayers Error: $e';
+        _isError = true;
+      });
+    }
+  }
+
+  Future<void> _playSoundAplay() async {
+    setState(() {
+      _statusMessage = 'aplay: Playing audio...';
+      _isError = false;
+    });
+
+    try {
+      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      final result = await Process.run('aplay', [filePath]);
+
+      if (result.exitCode == 0) {
+        setState(() {
+          _statusMessage = 'aplay: Audio played successfully';
+          _isError = false;
+        });
+      } else {
+        setState(() {
+          _statusMessage = 'aplay Error: ${result.stderr}';
+          _isError = true;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'aplay Exception: $e';
+        _isError = true;
+      });
+    }
+  }
+
+  Future<void> _playSoundGStreamer() async {
+    setState(() {
+      _statusMessage = 'GStreamer: Playing audio...';
+      _isError = false;
+    });
+
+    try {
+      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      final result = await Process.run('gst-launch-1.0', [
+        'playbin',
+        'uri=file://$filePath',
+      ]);
+
+      if (result.exitCode == 0) {
+        setState(() {
+          _statusMessage = 'GStreamer: Audio played successfully';
+          _isError = false;
+        });
+      } else {
+        setState(() {
+          _statusMessage = 'GStreamer Error: ${result.stderr}';
+          _isError = true;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'GStreamer Exception: $e';
+        _isError = true;
+      });
+    }
+  }
+
+  Future<void> _playSoundPaplay() async {
+    setState(() {
+      _statusMessage = 'paplay: Playing audio...';
+      _isError = false;
+    });
+
+    try {
+      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      final result = await Process.run('paplay', [filePath]);
+
+      if (result.exitCode == 0) {
+        setState(() {
+          _statusMessage = 'paplay: Audio played successfully';
+          _isError = false;
+        });
+      } else {
+        setState(() {
+          _statusMessage = 'paplay Error: ${result.stderr}';
+          _isError = true;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'paplay Exception: $e';
         _isError = true;
       });
     }
@@ -166,8 +254,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10.0,
+                runSpacing: 10.0,
                 children: [
                   ElevatedButton.icon(
                     onPressed: _togglePicture,
@@ -175,9 +265,24 @@ class _MyHomePageState extends State<MyHomePage> {
                     label: Text(_showPicture ? 'Hide Picture' : 'Show Picture'),
                   ),
                   ElevatedButton.icon(
-                    onPressed: _playSound,
-                    icon: const Icon(Icons.volume_up),
-                    label: const Text('Play Sound'),
+                    onPressed: _playSoundAudioPlayers,
+                    icon: const Icon(Icons.audiotrack),
+                    label: const Text('AudioPlayers'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _playSoundAplay,
+                    icon: const Icon(Icons.terminal),
+                    label: const Text('aplay'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _playSoundGStreamer,
+                    icon: const Icon(Icons.play_circle_fill),
+                    label: const Text('GStreamer'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _playSoundPaplay,
+                    icon: const Icon(Icons.speaker),
+                    label: const Text('paplay'),
                   ),
                 ],
               ),
