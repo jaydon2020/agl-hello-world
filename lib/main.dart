@@ -173,35 +173,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> _playSoundPaplay() async {
-    setState(() {
-      _statusMessage = 'paplay: Playing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      final result = await Process.run('paplay', [filePath]);
-
-      if (result.exitCode == 0) {
-        setState(() {
-          _statusMessage = 'paplay: Audio played successfully';
-          _isError = false;
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'paplay Error: ${result.stderr}';
-          _isError = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'paplay Exception: $e';
-        _isError = true;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -278,11 +249,6 @@ class _MyHomePageState extends State<MyHomePage> {
                     onPressed: _playSoundGStreamer,
                     icon: const Icon(Icons.play_circle_fill),
                     label: const Text('GStreamer'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundPaplay,
-                    icon: const Icon(Icons.speaker),
-                    label: const Text('paplay'),
                   ),
                 ],
               ),

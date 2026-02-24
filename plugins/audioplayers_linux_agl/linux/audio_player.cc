@@ -29,7 +29,7 @@ AudioPlayer::AudioPlayer(const std::string& playerId,
   panorama_ = gst_element_factory_make("audiopanorama", nullptr);
   if (panorama_) {
     audiobin_ = gst_bin_new(nullptr);
-    audiosink_ = gst_element_factory_make("autoaudiosink", nullptr);
+    audiosink_ = gst_element_factory_make("pipewiresink", nullptr);
 
     gst_bin_add_many(GST_BIN(audiobin_), panorama_, audiosink_, nullptr);
     gst_element_link(panorama_, audiosink_);
