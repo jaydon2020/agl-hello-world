@@ -90,7 +90,7 @@ class _MyHomePageState extends State<MyHomePage> {
       debugPrint('Diagnostic: Playing sound from: $filePath');
 
       await _audioPlayer
-          .play(DeviceFileSource(filePath))
+          .play(filePath, isLocal: true)
           .timeout(
             const Duration(seconds: 5),
             onTimeout: () {
