@@ -39,14 +39,16 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isError = false;
   late AudioPlayer _audioPlayer;
 
+  // Toyota AGL backend MethodChannel — used to manually 'create' the player
+  static const MethodChannel _audioChannel = MethodChannel(
+    'xyz.luan/audioplayers',
+  );
+  static const String _playerId = 'agl_player_1';
+
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
-    _audioPlayer.notificationService.setNotification(
-      title: 'AGL Hello World',
-      artist: 'Flutter',
-    );
     _readAglVersion();
   }
 
@@ -90,6 +92,16 @@ class _MyHomePageState extends State<MyHomePage> {
 
     try {
       final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+
+      // CRITICAL: Manually tell the Toyota C++ backend to create the player
+      // This fixes the "Player has not yet been created" error
+      try {
+        await _audioChannel.invokeMethod('create', {'playerId': _playerId});
+        debugPrint('Diagnostic: Player created with id=$_playerId');
+      } catch (e) {
+        debugPrint('Note: Player might already exist: $e');
+      }
+
       setState(() => _statusMessage = 'Audioplayers: Playing audio...');
       debugPrint('Diagnostic: Playing sound from: $filePath');
 
@@ -153,9 +165,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
     try {
       final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      // Include media.role=Multimedia so WirePlumber allows audio output
       final result = await Process.run('gst-launch-1.0', [
         'playbin',
         'uri=file://$filePath',
+        'audio-sink=pipewiresink stream-properties="p,media.role=Multimedia"',
       ]);
 
       if (result.exitCode == 0) {
