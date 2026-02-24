@@ -43,6 +43,10 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _audioPlayer.notificationService.setNotification(
+      title: 'AGL Hello World',
+      artist: 'Flutter',
+    );
     _readAglVersion();
   }
 
