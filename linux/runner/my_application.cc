@@ -43,8 +43,28 @@ static void agl_audio_player_handle_method_call(
         response = FL_METHOD_RESPONSE(fl_method_error_response_new("GST_ERROR", error->message, nullptr));
         g_error_free(error);
       } else {
-        gst_element_set_state(pipeline, GST_STATE_PLAYING);
-        response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+        // Add bus watch to catch asynchronous errors during playback
+        GstBus *bus = gst_element_get_bus(pipeline);
+        gst_bus_add_watch(bus, [](GstBus *bus, GstMessage *msg, gpointer data) -> gboolean {
+          if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
+            GError *err = nullptr;
+            gchar *debug_info = nullptr;
+            gst_message_parse_error(msg, &err, &debug_info);
+            g_printerr("== GSTREAMER ASYNC ERROR ==\nMessage: %s\nDebug: %s\n===========================\n", 
+                       err->message, debug_info ? debug_info : "none");
+            g_clear_error(&err);
+            g_free(debug_info);
+          }
+          return TRUE;
+        }, nullptr);
+        gst_object_unref(bus);
+
+        GstStateChangeReturn ret = gst_element_set_state(pipeline, GST_STATE_PLAYING);
+        if (ret == GST_STATE_CHANGE_FAILURE) {
+            response = FL_METHOD_RESPONSE(fl_method_error_response_new("PLAY_ERROR", "gst_element_set_state returned GST_STATE_CHANGE_FAILURE", nullptr));
+        } else {
+            response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+        }
       }
     } else {
       response = FL_METHOD_RESPONSE(fl_method_error_response_new("INVALID_ARG", "Expected a string path", nullptr));
