@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -38,17 +39,20 @@ class _MyHomePageState extends State<MyHomePage> {
   String _statusMessage = '';
   bool _isError = false;
   late AudioPlayer _audioPlayer;
+  late ja.AudioPlayer _justAudioPlayer;
 
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _justAudioPlayer = ja.AudioPlayer();
     _readAglVersion();
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
+    _justAudioPlayer.dispose();
     super.dispose();
   }
 
@@ -107,6 +111,36 @@ class _MyHomePageState extends State<MyHomePage> {
       debugPrint('Diagnostic: Audio error: $e');
       setState(() {
         _statusMessage = 'Audioplayers Error: $e';
+        _isError = true;
+      });
+    }
+  }
+
+  Future<void> _playSoundJustAudio() async {
+    setState(() {
+      _statusMessage = 'just_audio: Preparing audio...';
+      _isError = false;
+    });
+
+    try {
+      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      await _justAudioPlayer.setFilePath(filePath);
+
+      setState(() => _statusMessage = 'just_audio: Playing audio...');
+      await _justAudioPlayer.play().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw Exception('just_audio playback timed out after 5 seconds');
+        },
+      );
+
+      setState(() {
+        _statusMessage = 'just_audio: Audio played successfully';
+        _isError = false;
+      });
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'just_audio Error: $e';
         _isError = true;
       });
     }
@@ -204,7 +238,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.0+5',
+                'App Version: 1.0.0+6',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
@@ -241,6 +275,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     label: const Text('AudioPlayers'),
                   ),
                   ElevatedButton.icon(
+                    onPressed: _playSoundJustAudio,
+                    icon: const Icon(Icons.music_note),
+                    label: const Text('just_audio'),
+                  ),
+                  ElevatedButton.icon(
                     onPressed: _playSoundAplay,
                     icon: const Icon(Icons.terminal),
                     label: const Text('aplay'),
@@ -252,6 +291,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
