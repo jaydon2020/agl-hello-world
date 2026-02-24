@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
-import 'package:just_audio/just_audio.dart' as ja;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,292 +5,95 @@ void main() {
   runApp(const MyApp());
 }
 
+// --- Platform Channel Wrapper ---
+class AglNativeAudioPlayer {
+  static const MethodChannel _channel = MethodChannel('agl_audio_player');
+
+  Future<void> playLocalFile(String path) async {
+    try {
+      await _channel.invokeMethod('play', path);
+    } on PlatformException catch (_) {
+      debugPrint("Failed to play: '\${_.message}'.");
+    }
+  }
+
+  Future<void> pause() async {
+    await _channel.invokeMethod('pause');
+  }
+
+  Future<void> stop() async {
+    await _channel.invokeMethod('stop');
+  }
+}
+
+// --- Basic UI ---
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AGL Hello World',
+      title: 'AGL Custom Audio',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'AGL Custom App'),
+      home: const AudioTestScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
+class AudioTestScreen extends StatefulWidget {
+  const AudioTestScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<AudioTestScreen> createState() => _AudioTestScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  String _aglVersion = 'Unknown';
-  bool _showPicture = false;
-  String _statusMessage = '';
-  bool _isError = false;
-  late AudioPlayer _audioPlayer;
-  late ja.AudioPlayer _justAudioPlayer;
-
-  @override
-  void initState() {
-    super.initState();
-    _audioPlayer = AudioPlayer();
-    _justAudioPlayer = ja.AudioPlayer();
-    _readAglVersion();
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    _justAudioPlayer.dispose();
-    super.dispose();
-  }
-
-  Future<void> _readAglVersion() async {
-    try {
-      final file = File('/etc/os-release');
-      if (await file.exists()) {
-        final lines = await file.readAsLines();
-        for (var line in lines) {
-          if (line.startsWith('PRETTY_NAME=') ||
-              line.startsWith('VERSION_ID=')) {
-            setState(() {
-              _aglVersion = line.split('=')[1].replaceAll('"', '');
-            });
-            break;
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error reading /etc/os-release: $e');
-    }
-  }
-
-  void _togglePicture() {
-    setState(() {
-      _showPicture = !_showPicture;
-    });
-  }
-
-  Future<void> _playSoundAudioPlayers() async {
-    setState(() {
-      _statusMessage = 'Audioplayers: Preparing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      setState(() => _statusMessage = 'Audioplayers: Playing audio...');
-      debugPrint('Diagnostic: Playing sound from: $filePath');
-
-      await _audioPlayer
-          .play(DeviceFileSource(filePath))
-          .timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              throw Exception('Audio playback timed out after 5 seconds');
-            },
-          );
-
-      debugPrint('Diagnostic: Audio played successfully');
-      setState(() {
-        _statusMessage = 'Audioplayers: Audio played successfully';
-        _isError = false;
-      });
-    } catch (e) {
-      debugPrint('Diagnostic: Audio error: $e');
-      setState(() {
-        _statusMessage = 'Audioplayers Error: $e';
-        _isError = true;
-      });
-    }
-  }
-
-  Future<void> _playSoundJustAudio() async {
-    setState(() {
-      _statusMessage = 'just_audio: Preparing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      await _justAudioPlayer.setFilePath(filePath);
-
-      setState(() => _statusMessage = 'just_audio: Playing audio...');
-      await _justAudioPlayer.play().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw Exception('just_audio playback timed out after 5 seconds');
-        },
-      );
-
-      setState(() {
-        _statusMessage = 'just_audio: Audio played successfully';
-        _isError = false;
-      });
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'just_audio Error: $e';
-        _isError = true;
-      });
-    }
-  }
-
-  Future<void> _playSoundAplay() async {
-    setState(() {
-      _statusMessage = 'aplay: Playing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      final result = await Process.run('aplay', [filePath]);
-
-      if (result.exitCode == 0) {
-        setState(() {
-          _statusMessage = 'aplay: Audio played successfully';
-          _isError = false;
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'aplay Error: ${result.stderr}';
-          _isError = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'aplay Exception: $e';
-        _isError = true;
-      });
-    }
-  }
-
-  Future<void> _playSoundGStreamer() async {
-    setState(() {
-      _statusMessage = 'GStreamer: Playing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      final result = await Process.run('gst-launch-1.0', [
-        'playbin',
-        'uri=file://$filePath',
-      ]);
-
-      if (result.exitCode == 0) {
-        setState(() {
-          _statusMessage = 'GStreamer: Audio played successfully';
-          _isError = false;
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'GStreamer Error: ${result.stderr}';
-          _isError = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'GStreamer Exception: $e';
-        _isError = true;
-      });
-    }
-  }
+class _AudioTestScreenState extends State<AudioTestScreen> {
+  final AglNativeAudioPlayer _player = AglNativeAudioPlayer();
+  // Using a standard ALSA test sound available on most AGL builds
+  final String _testFilePath = '/usr/share/sounds/alsa/Front_Center.wav';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        title: const Text('AGL Pipewire Native Bridge'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
       ),
       body: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const Text(
-                'AGL Version:',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                _aglVersion,
-                style: const TextStyle(fontSize: 24, color: Colors.blue),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Developed by:',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const Text(
-                'Antigravity',
-                style: TextStyle(fontSize: 24, fontStyle: FontStyle.italic),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'App Version: 1.0.0+6',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              if (_showPicture)
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Image.asset('assets/images/welcome.png', height: 200),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'GStreamer -> PipeWire (media.role=Multimedia)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Play'),
+                  onPressed: () => _player.playLocalFile(_testFilePath),
                 ),
-              if (_statusMessage.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: Text(
-                    _statusMessage,
-                    style: TextStyle(
-                      color: _isError ? Colors.red : Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                const SizedBox(width: 20),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.pause),
+                  label: const Text('Pause'),
+                  onPressed: () => _player.pause(),
                 ),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10.0,
-                runSpacing: 10.0,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _togglePicture,
-                    icon: const Icon(Icons.image),
-                    label: Text(_showPicture ? 'Hide Picture' : 'Show Picture'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundAudioPlayers,
-                    icon: const Icon(Icons.audiotrack),
-                    label: const Text('AudioPlayers'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundJustAudio,
-                    icon: const Icon(Icons.music_note),
-                    label: const Text('just_audio'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundAplay,
-                    icon: const Icon(Icons.terminal),
-                    label: const Text('aplay'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundGStreamer,
-                    icon: const Icon(Icons.play_circle_fill),
-                    label: const Text('GStreamer'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+                const SizedBox(width: 20),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.stop),
+                  label: const Text('Stop'),
+                  onPressed: () => _player.stop(),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

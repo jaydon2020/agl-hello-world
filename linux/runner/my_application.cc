@@ -1,11 +1,72 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gst/gst.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+
+// Global pipeline reference
+static GstElement* pipeline = nullptr;
+
+// Custom Method channel handler
+static void agl_audio_player_handle_method_call(
+    FlMethodChannel* channel,
+    FlMethodCall* method_call,
+    gpointer user_data) {
+  g_autoptr(FlMethodResponse) response = nullptr;
+  const gchar* method = fl_method_call_get_name(method_call);
+
+  if (strcmp(method, "play") == 0) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_STRING) {
+      const gchar* path = fl_value_get_string(args);
+      
+      if (pipeline) {
+        gst_element_set_state(pipeline, GST_STATE_NULL);
+        gst_object_unref(pipeline);
+        pipeline = nullptr;
+      }
+      
+      // CRITICAL: Construct the pipeline exactly as AGL's WirePlumber requires
+      gchar* pipeline_str = g_strdup_printf(
+          "playbin uri=file://%s audio-sink=\"pipewiresink stream-properties=\\\"p,media.role=Multimedia\\\"\"",
+          path);
+          
+      GError* error = nullptr;
+      pipeline = gst_parse_launch(pipeline_str, &error);
+      g_free(pipeline_str);
+
+      if (error) {
+        response = FL_METHOD_RESPONSE(fl_method_error_response_new("GST_ERROR", error->message, nullptr));
+        g_error_free(error);
+      } else {
+        gst_element_set_state(pipeline, GST_STATE_PLAYING);
+        response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+      }
+    } else {
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new("INVALID_ARG", "Expected a string path", nullptr));
+    }
+  } else if (strcmp(method, "pause") == 0) {
+    if (pipeline) {
+      gst_element_set_state(pipeline, GST_STATE_PAUSED);
+    }
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "stop") == 0) {
+    if (pipeline) {
+      gst_element_set_state(pipeline, GST_STATE_NULL);
+      gst_object_unref(pipeline);
+      pipeline = nullptr;
+    }
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+
+  fl_method_call_respond(method_call, response, nullptr);
+}
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -16,6 +77,12 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
+  static bool gst_initialized = false;
+  if (!gst_initialized) {
+    gst_init(nullptr, nullptr);
+    gst_initialized = true;
+  }
+
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
@@ -56,6 +123,15 @@ static void my_application_activate(GApplication* application) {
   FlView* view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+  // Register the custom Method Channel
+  FlEngine* engine = fl_view_get_engine(view);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) channel =
+      fl_method_channel_new(fl_engine_get_binary_messenger(engine),
+                            "agl_audio_player",
+                            FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(channel, agl_audio_player_handle_method_call, nullptr, nullptr);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
