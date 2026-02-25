@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,23 +36,33 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showPicture = false;
   String _statusMessage = '';
   bool _isError = false;
-  late AudioPlayer _audioPlayer;
+
+  // Talk directly to the Toyota C++ audioplayers backend
+  // This bypasses the Dart AudioPlayer class entirely to avoid
+  // EventChannel/MethodChannel mismatches with the ivi-homescreen plugin.
+  static const MethodChannel _toyotaAudio = MethodChannel(
+    'xyz.luan/audioplayers',
+  );
+  static const String _playerId = 'agl_hello_player';
+  bool _playerCreated = false;
 
   @override
   void initState() {
     super.initState();
-    _audioPlayer = AudioPlayer();
-    // Log errors from the player
-    _audioPlayer.onLog.listen((msg) {
-      debugPrint('AudioPlayer log: $msg');
-    });
+    _initToyotaPlayer();
     _readAglVersion();
   }
 
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
+  /// Pre-create the GStreamer player in the Toyota C++ backend
+  Future<void> _initToyotaPlayer() async {
+    try {
+      await _toyotaAudio.invokeMethod('create', {'playerId': _playerId});
+      _playerCreated = true;
+      debugPrint('Toyota player created: $_playerId');
+    } catch (e) {
+      debugPrint('Toyota player create failed (may already exist): $e');
+      _playerCreated = true; // assume it exists
+    }
   }
 
   Future<void> _readAglVersion() async {
@@ -81,35 +91,45 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Future<void> _playSoundAudioPlayers() async {
+  /// Play using Toyota C++ backend directly: create → setSourceUrl → resume
+  Future<void> _playSoundToyota() async {
     setState(() {
-      _statusMessage = 'Audioplayers v6: Preparing audio...';
+      _statusMessage = 'Toyota Plugin: Preparing...';
       _isError = false;
     });
 
     try {
       const String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      debugPrint('Diagnostic: Setting source to $filePath');
 
-      // audioplayers v6 API: setSource then resume
-      // The Toyota C++ plugin handles: create → setSourceUrl → resume
-      // The v6 platform interface calls these automatically!
-      setState(() => _statusMessage = 'Audioplayers v6: Setting source...');
-      await _audioPlayer.setSource(DeviceFileSource(filePath));
-      debugPrint('Diagnostic: Source set successfully');
+      // Ensure player is created
+      if (!_playerCreated) {
+        await _initToyotaPlayer();
+      }
 
-      setState(() => _statusMessage = 'Audioplayers v6: Playing...');
-      await _audioPlayer.resume();
+      // Step 1: Set the source URL
+      setState(() => _statusMessage = 'Toyota Plugin: Setting source...');
+      debugPrint('Diagnostic: setSourceUrl path=$filePath');
+      await _toyotaAudio.invokeMethod('setSourceUrl', {
+        'playerId': _playerId,
+        'url': filePath,
+        'isLocal': true,
+      });
+      debugPrint('Diagnostic: Source set OK');
+
+      // Step 2: Resume (start playback)
+      setState(() => _statusMessage = 'Toyota Plugin: Playing...');
+      debugPrint('Diagnostic: resume');
+      await _toyotaAudio.invokeMethod('resume', {'playerId': _playerId});
 
       debugPrint('Diagnostic: Audio playing!');
       setState(() {
-        _statusMessage = 'Audioplayers v6: Audio played successfully!';
+        _statusMessage = 'Toyota Plugin: Audio played successfully!';
         _isError = false;
       });
     } catch (e) {
-      debugPrint('Diagnostic: Audio error: $e');
+      debugPrint('Diagnostic: Toyota audio error: $e');
       setState(() {
-        _statusMessage = 'Audioplayers Error: $e';
+        _statusMessage = 'Toyota Error: $e';
         _isError = true;
       });
     }
@@ -238,7 +258,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.1+5',
+                'App Version: 1.0.2+6',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
@@ -270,9 +290,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     label: Text(_showPicture ? 'Hide Picture' : 'Show Picture'),
                   ),
                   ElevatedButton.icon(
-                    onPressed: _playSoundAudioPlayers,
+                    onPressed: _playSoundToyota,
                     icon: const Icon(Icons.audiotrack),
-                    label: const Text('AudioPlayers'),
+                    label: const Text('Toyota Plugin'),
                   ),
                   ElevatedButton.icon(
                     onPressed: _playSoundAplay,
