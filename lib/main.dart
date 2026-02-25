@@ -33,26 +33,22 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   String _aglVersion = 'Unknown';
-  bool _showPicture = false;
   String _statusMessage = '';
   bool _isError = false;
+  bool _showPicture = false; // Restored Picture State
 
-  // Talk directly to the Toyota C++ audioplayers backend
-  static const MethodChannel _toyotaAudio = MethodChannel(
+  // Direct communication with the native AGL C++ audio backend
+  static const MethodChannel _audioChannel = MethodChannel(
     'xyz.luan/audioplayers',
   );
   static const String _playerId = 'agl_hello_player';
   bool _playerCreated = false;
 
-  // The Toyota C++ AudioPlayer sends events back via BasicMessageChannel
-  // on 'xyz.luan/audioplayers/events/{playerId}'.
-  // We MUST listen for these, otherwise Send() in C++ may segfault.
+  // Event channels required by the backend to prevent C++ memory leaks/segfaults
   static const BasicMessageChannel _playerEvents = BasicMessageChannel(
     'xyz.luan/audioplayers/events/$_playerId',
     StandardMessageCodec(),
   );
-
-  // The Toyota C++ plugin also registers a handler on global events
   static const MethodChannel _globalEvents = MethodChannel(
     'xyz.luan/audioplayers.global/events',
   );
@@ -61,37 +57,28 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     _setupEventHandlers();
-    _initToyotaPlayer();
+    _initNativePlayer();
     _readAglVersion();
   }
 
-  /// Set up handlers to receive events from the Toyota C++ backend
+  /// Silently absorb backend events so the C++ engine doesn't crash
   void _setupEventHandlers() {
-    // Listen for per-player events (onPrepared, onDuration, onComplete, etc.)
-    _playerEvents.setMessageHandler((message) async {
-      debugPrint('Toyota player event: $message');
-      return null;
-    });
-
-    // Handle the global events channel to prevent MissingPluginException
-    _globalEvents.setMethodCallHandler((call) async {
-      debugPrint('Toyota global event: ${call.method}');
-      return null;
-    });
+    _playerEvents.setMessageHandler((message) async => null);
+    _globalEvents.setMethodCallHandler((call) async => null);
   }
 
-  /// Pre-create the GStreamer player in the Toyota C++ backend
-  Future<void> _initToyotaPlayer() async {
+  /// Initialize the GStreamer pipeline inside the AGL OS
+  Future<void> _initNativePlayer() async {
     try {
-      await _toyotaAudio.invokeMethod('create', {'playerId': _playerId});
+      await _audioChannel.invokeMethod('create', {'playerId': _playerId});
       _playerCreated = true;
-      debugPrint('Toyota player created: $_playerId');
     } catch (e) {
-      debugPrint('Toyota player create failed (may already exist): $e');
-      _playerCreated = true; // assume it exists
+      // If it already exists, just proceed
+      _playerCreated = true;
     }
   }
 
+  /// Fetch the OS version for the UI
   Future<void> _readAglVersion() async {
     try {
       final file = File('/etc/os-release');
@@ -112,143 +99,45 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// Restored Picture Toggle Method
   void _togglePicture() {
     setState(() {
       _showPicture = !_showPicture;
     });
   }
 
-  /// Play using Toyota C++ backend directly: create → setSourceUrl → resume
-  Future<void> _playSoundToyota() async {
+  /// Play audio natively via PipeWire
+  Future<void> _playNativeAudio() async {
     setState(() {
-      _statusMessage = 'Toyota Plugin: Preparing...';
+      _statusMessage = 'Preparing audio...';
       _isError = false;
     });
 
     try {
       const String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
 
-      // Ensure player is created
+      // Ensure the GStreamer pipeline is ready
       if (!_playerCreated) {
-        await _initToyotaPlayer();
+        await _initNativePlayer();
       }
 
-      // Step 1: Set the source URL
-      setState(() => _statusMessage = 'Toyota Plugin: Setting source...');
-      debugPrint('Diagnostic: setSourceUrl path=$filePath');
-      await _toyotaAudio.invokeMethod('setSourceUrl', {
+      // Step 1: Tell C++ to load the file
+      await _audioChannel.invokeMethod('setSourceUrl', {
         'playerId': _playerId,
         'url': filePath,
         'isLocal': true,
       });
-      debugPrint('Diagnostic: Source set OK');
 
-      // Step 2: Resume (start playback)
-      setState(() => _statusMessage = 'Toyota Plugin: Playing...');
-      debugPrint('Diagnostic: resume');
-      await _toyotaAudio.invokeMethod('resume', {'playerId': _playerId});
+      // Step 2: Tell C++ to push the audio to PipeWire
+      await _audioChannel.invokeMethod('resume', {'playerId': _playerId});
 
-      debugPrint('Diagnostic: Audio playing!');
       setState(() {
-        _statusMessage = 'Toyota Plugin: Audio played successfully!';
+        _statusMessage = 'Audio played successfully!';
         _isError = false;
       });
     } catch (e) {
-      debugPrint('Diagnostic: Toyota audio error: $e');
       setState(() {
-        _statusMessage = 'Toyota Error: $e';
-        _isError = true;
-      });
-    }
-  }
-
-  Future<void> _playSoundAplay() async {
-    setState(() {
-      _statusMessage = 'aplay: Playing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      final result = await Process.run('aplay', [filePath]);
-
-      if (result.exitCode == 0) {
-        setState(() {
-          _statusMessage = 'aplay: Audio played successfully';
-          _isError = false;
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'aplay Error: ${result.stderr}';
-          _isError = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'aplay Exception: $e';
-        _isError = true;
-      });
-    }
-  }
-
-  Future<void> _playSoundGStreamer() async {
-    setState(() {
-      _statusMessage = 'GStreamer: Playing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      // Include media.role=Multimedia so WirePlumber allows audio output
-      final result = await Process.run('gst-launch-1.0', [
-        'playbin',
-        'uri=file://$filePath',
-        'audio-sink=pipewiresink stream-properties="p,media.role=Multimedia"',
-      ]);
-
-      if (result.exitCode == 0) {
-        setState(() {
-          _statusMessage = 'GStreamer: Audio played successfully';
-          _isError = false;
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'GStreamer Error: ${result.stderr}';
-          _isError = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'GStreamer Exception: $e';
-        _isError = true;
-      });
-    }
-  }
-
-  Future<void> _playSoundPaplay() async {
-    setState(() {
-      _statusMessage = 'paplay: Playing audio...';
-      _isError = false;
-    });
-
-    try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
-      final result = await Process.run('paplay', [filePath]);
-
-      if (result.exitCode == 0) {
-        setState(() {
-          _statusMessage = 'paplay: Audio played successfully';
-          _isError = false;
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'paplay Error: ${result.stderr}';
-          _isError = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'paplay Exception: $e';
+        _statusMessage = 'Audio Error: $e';
         _isError = true;
       });
     }
@@ -285,15 +174,18 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.2+6',
+                'App Version: 1.1.0 (Native Audio)',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
+
+              // Restored Image Logic
               if (_showPicture)
                 Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Image.asset('assets/images/welcome.png', height: 200),
                 ),
+
               if (_statusMessage.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.all(10.0),
@@ -302,13 +194,18 @@ class _MyHomePageState extends State<MyHomePage> {
                     style: TextStyle(
                       color: _isError ? Colors.red : Colors.green,
                       fontWeight: FontWeight.bold,
+                      fontSize: 16,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
+
+              const SizedBox(height: 10),
+
+              // Buttons grouped together like your original UI
               Wrap(
                 alignment: WrapAlignment.center,
-                spacing: 10.0,
+                spacing: 15.0,
                 runSpacing: 10.0,
                 children: [
                   ElevatedButton.icon(
@@ -317,24 +214,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     label: Text(_showPicture ? 'Hide Picture' : 'Show Picture'),
                   ),
                   ElevatedButton.icon(
-                    onPressed: _playSoundToyota,
-                    icon: const Icon(Icons.audiotrack),
-                    label: const Text('Toyota Plugin'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundAplay,
-                    icon: const Icon(Icons.terminal),
-                    label: const Text('aplay'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundGStreamer,
-                    icon: const Icon(Icons.play_circle_fill),
-                    label: const Text('GStreamer'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _playSoundPaplay,
+                    onPressed: _playNativeAudio,
                     icon: const Icon(Icons.speaker),
-                    label: const Text('paplay'),
+                    label: const Text('Play Native Sound'),
                   ),
                 ],
               ),
