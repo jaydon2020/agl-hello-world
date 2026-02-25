@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -39,15 +38,14 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isError = false;
   late AudioPlayer _audioPlayer;
 
-  // Toyota AGL backend MethodChannel — used to manually 'create' the player
-  static const MethodChannel _audioChannel = MethodChannel(
-    'xyz.luan/audioplayers',
-  );
-
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    // Log errors from the player
+    _audioPlayer.onLog.listen((msg) {
+      debugPrint('AudioPlayer log: $msg');
+    });
     _readAglVersion();
   }
 
@@ -85,42 +83,27 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _playSoundAudioPlayers() async {
     setState(() {
-      _statusMessage = 'Audioplayers: Preparing audio...';
+      _statusMessage = 'Audioplayers v6: Preparing audio...';
       _isError = false;
     });
 
     try {
-      final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      const String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
+      debugPrint('Diagnostic: Setting source to $filePath');
 
-      // The Toyota C++ backend (v5+ Pigeon API) does NOT have a "play" method.
-      // It expects: create → setSourceUrl → resume
-      // We bypass the Dart AudioPlayer.play() entirely and send raw calls.
-      final String playerId = _audioPlayer.playerId;
+      // audioplayers v6 API: setSource then resume
+      // The Toyota C++ plugin handles: create → setSourceUrl → resume
+      // The v6 platform interface calls these automatically!
+      setState(() => _statusMessage = 'Audioplayers v6: Setting source...');
+      await _audioPlayer.setSource(DeviceFileSource(filePath));
+      debugPrint('Diagnostic: Source set successfully');
 
-      // Step 1: Create the player in the C++ backend
-      try {
-        await _audioChannel.invokeMethod('create', {'playerId': playerId});
-        debugPrint('Diagnostic: Player created with ID=$playerId');
-      } catch (e) {
-        debugPrint('Note: Player create (may already exist): $e');
-      }
+      setState(() => _statusMessage = 'Audioplayers v6: Playing...');
+      await _audioPlayer.resume();
 
-      // Step 2: Set the source URL (C++ will prepend file:// for local files)
-      setState(() => _statusMessage = 'Audioplayers: Setting source...');
-      await _audioChannel.invokeMethod('setSourceUrl', {
-        'playerId': playerId,
-        'url': filePath,
-        'isLocal': true,
-      });
-      debugPrint('Diagnostic: Source set to $filePath');
-
-      // Step 3: Resume (start playback)
-      setState(() => _statusMessage = 'Audioplayers: Playing audio...');
-      await _audioChannel.invokeMethod('resume', {'playerId': playerId});
-
-      debugPrint('Diagnostic: Audio played successfully');
+      debugPrint('Diagnostic: Audio playing!');
       setState(() {
-        _statusMessage = 'Audioplayers: Audio played successfully!';
+        _statusMessage = 'Audioplayers v6: Audio played successfully!';
         _isError = false;
       });
     } catch (e) {
