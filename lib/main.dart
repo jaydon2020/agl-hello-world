@@ -43,7 +43,6 @@ class _MyHomePageState extends State<MyHomePage> {
   static const MethodChannel _audioChannel = MethodChannel(
     'xyz.luan/audioplayers',
   );
-  static const String _playerId = 'agl_player_1';
 
   @override
   void initState() {
@@ -93,11 +92,16 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
 
-      // CRITICAL: Manually tell the Toyota C++ backend to create the player
+      // 1. Get the actual dynamically generated ID from the audio player
+      final String actualPlayerId = _audioPlayer.playerId;
+
+      // 2. Pass THAT exact ID to the C++ backend
       // This fixes the "Player has not yet been created" error
       try {
-        await _audioChannel.invokeMethod('create', {'playerId': _playerId});
-        debugPrint('Diagnostic: Player created with id=$_playerId');
+        await _audioChannel.invokeMethod('create', {
+          'playerId': actualPlayerId,
+        });
+        debugPrint('Diagnostic: Player created with exact ID=$actualPlayerId');
       } catch (e) {
         debugPrint('Note: Player might already exist: $e');
       }
@@ -251,7 +255,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'App Version: 1.0.0+5',
+                'App Version: 1.0.1+5',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 20),
