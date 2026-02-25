@@ -92,35 +92,35 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       final String filePath = '/usr/share/sounds/alsa/Front_Center.wav';
 
-      // 1. Get the actual dynamically generated ID from the audio player
-      final String actualPlayerId = _audioPlayer.playerId;
+      // The Toyota C++ backend (v5+ Pigeon API) does NOT have a "play" method.
+      // It expects: create → setSourceUrl → resume
+      // We bypass the Dart AudioPlayer.play() entirely and send raw calls.
+      final String playerId = _audioPlayer.playerId;
 
-      // 2. Pass THAT exact ID to the C++ backend
-      // This fixes the "Player has not yet been created" error
+      // Step 1: Create the player in the C++ backend
       try {
-        await _audioChannel.invokeMethod('create', {
-          'playerId': actualPlayerId,
-        });
-        debugPrint('Diagnostic: Player created with exact ID=$actualPlayerId');
+        await _audioChannel.invokeMethod('create', {'playerId': playerId});
+        debugPrint('Diagnostic: Player created with ID=$playerId');
       } catch (e) {
-        debugPrint('Note: Player might already exist: $e');
+        debugPrint('Note: Player create (may already exist): $e');
       }
 
-      setState(() => _statusMessage = 'Audioplayers: Playing audio...');
-      debugPrint('Diagnostic: Playing sound from: $filePath');
+      // Step 2: Set the source URL (C++ will prepend file:// for local files)
+      setState(() => _statusMessage = 'Audioplayers: Setting source...');
+      await _audioChannel.invokeMethod('setSourceUrl', {
+        'playerId': playerId,
+        'url': filePath,
+        'isLocal': true,
+      });
+      debugPrint('Diagnostic: Source set to $filePath');
 
-      await _audioPlayer
-          .play(filePath, isLocal: true)
-          .timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              throw Exception('Audio playback timed out after 5 seconds');
-            },
-          );
+      // Step 3: Resume (start playback)
+      setState(() => _statusMessage = 'Audioplayers: Playing audio...');
+      await _audioChannel.invokeMethod('resume', {'playerId': playerId});
 
       debugPrint('Diagnostic: Audio played successfully');
       setState(() {
-        _statusMessage = 'Audioplayers: Audio played successfully';
+        _statusMessage = 'Audioplayers: Audio played successfully!';
         _isError = false;
       });
     } catch (e) {
