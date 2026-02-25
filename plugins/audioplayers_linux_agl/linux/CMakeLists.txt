@@ -14,13 +14,19 @@
 # limitations under the License.
 #
 
+# Adapted for standard Flutter Linux desktop builds.
+# Original Toyota plugin linked to platform_homescreen, plugin_common,
+# plugin_common_glib. We provide local stubs for those in plugins/common/.
+
+cmake_minimum_required(VERSION 3.10)
+
 set(PROJECT_NAME "audioplayers_linux")
 
 # This value is used when generating builds using this plugin, so it must
 # not be changed
-set(PLUGIN_NAME "plugin_${PROJECT_NAME}")
+set(PLUGIN_NAME "${PROJECT_NAME}_plugin")
 
-add_library(${PLUGIN_NAME} STATIC
+add_library(${PLUGIN_NAME} SHARED
         audioplayers_linux_plugin_c_api.cc
         audioplayers_linux_plugin.cc
         messages.cc
@@ -33,11 +39,18 @@ target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_17)
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST IMPORTED_TARGET REQUIRED gstreamer-1.0>=1.4 gstreamer-audio-1.0)
+
+# Include paths: local dir for stubs (plugins/common/*), plus the public header
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
-target_include_directories(${PLUGIN_NAME} INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(${PLUGIN_NAME} PUBLIC platform_homescreen flutter plugin_common plugin_common_glib PkgConfig::GST)
+
+# Provide a no-op SPDLOG_DEBUG macro since we don't have spdlog
+target_compile_definitions(${PLUGIN_NAME} PRIVATE "SPDLOG_DEBUG(...)=")
+
+target_include_directories(${PLUGIN_NAME} INTERFACE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(${PLUGIN_NAME} PRIVATE flutter PkgConfig::GST)
 
 # List of absolute paths to libraries that should be bundled with the plugin
 set(audioplayers_linux_bundled_libraries "" PARENT_SCOPE)
