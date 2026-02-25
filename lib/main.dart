@@ -38,19 +38,46 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isError = false;
 
   // Talk directly to the Toyota C++ audioplayers backend
-  // This bypasses the Dart AudioPlayer class entirely to avoid
-  // EventChannel/MethodChannel mismatches with the ivi-homescreen plugin.
   static const MethodChannel _toyotaAudio = MethodChannel(
     'xyz.luan/audioplayers',
   );
   static const String _playerId = 'agl_hello_player';
   bool _playerCreated = false;
 
+  // The Toyota C++ AudioPlayer sends events back via BasicMessageChannel
+  // on 'xyz.luan/audioplayers/events/{playerId}'.
+  // We MUST listen for these, otherwise Send() in C++ may segfault.
+  static const BasicMessageChannel _playerEvents = BasicMessageChannel(
+    'xyz.luan/audioplayers/events/$_playerId',
+    StandardMessageCodec(),
+  );
+
+  // The Toyota C++ plugin also registers a handler on global events
+  static const MethodChannel _globalEvents = MethodChannel(
+    'xyz.luan/audioplayers.global/events',
+  );
+
   @override
   void initState() {
     super.initState();
+    _setupEventHandlers();
     _initToyotaPlayer();
     _readAglVersion();
+  }
+
+  /// Set up handlers to receive events from the Toyota C++ backend
+  void _setupEventHandlers() {
+    // Listen for per-player events (onPrepared, onDuration, onComplete, etc.)
+    _playerEvents.setMessageHandler((message) async {
+      debugPrint('Toyota player event: $message');
+      return null;
+    });
+
+    // Handle the global events channel to prevent MissingPluginException
+    _globalEvents.setMethodCallHandler((call) async {
+      debugPrint('Toyota global event: ${call.method}');
+      return null;
+    });
   }
 
   /// Pre-create the GStreamer player in the Toyota C++ backend
