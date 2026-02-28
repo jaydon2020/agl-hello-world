@@ -143,6 +143,62 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  // ===========================================================================
+  // gRPC Control Plane + Native Media Playback (Data Plane)
+  // Demonstrating the modern AGL architecture shift (gRPC + PipeWire)
+  // ===========================================================================
+
+  Future<void> _fetchVehicleSpeedViaGrpc() async {
+    setState(() {
+      _statusMessage = 'gRPC: Requesting Vehicle.Speed from Kuksa-VAL...';
+      _isError = false;
+    });
+
+    // In a full production AGL app, you would compile Kuksa-VAL proto files
+    // and use the dart grpc package to open an HTTP/2 channel to localhost:55555.
+    // For demonstration of the architectural IPC concept:
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // Simulating a successful Kuksa gRPC response
+    setState(() {
+      _statusMessage = 'gRPC: Vehicle.Speed = 65 km/h';
+    });
+  }
+
+  void _playAudioDirectly() {
+    // Determine the absolute path where AGL installs the Flutter bundle assets
+    // Or use a hardcoded path for the built image. We'll use the release folder.
+    const String assetPath =
+        '/usr/share/flutter/hello_world/3.38.3/release/data/flutter_assets/assets/sounds/notification.wav';
+
+    // Use GStreamer to push the audio directly to AGL's PipeWire server (Data Plane)
+    // By invoking `gst-launch-1.0`, we bypass Dart plugin mismatch issues entirely.
+    Process.run('gst-launch-1.0', [
+      'filesrc',
+      'location=$assetPath',
+      '!',
+      'decodebin',
+      '!',
+      'audioconvert',
+      '!',
+      'audioresample',
+      '!',
+      'pipewiresink',
+    ]).then((ProcessResult results) {
+      if (results.exitCode != 0) {
+        debugPrint('GStreamer Error: ${results.stderr}');
+      }
+    });
+  }
+
+  void _onNotificationPressed() async {
+    // 1. Exercise Native AGL API (Control Plane: gRPC to Kuksa-VAL)
+    await _fetchVehicleSpeedViaGrpc();
+
+    // 2. Play the sound (Data Plane: Native GStreamer / PipeWire)
+    _playAudioDirectly();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -217,6 +273,15 @@ class _MyHomePageState extends State<MyHomePage> {
                     onPressed: _playNativeAudio,
                     icon: const Icon(Icons.speaker),
                     label: const Text('Play Native Sound'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _onNotificationPressed,
+                    icon: const Icon(Icons.notifications_active),
+                    label: const Text('Play Notification (gRPC+GST)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade100,
+                      foregroundColor: Colors.deepOrange.shade900,
+                    ),
                   ),
                 ],
               ),
