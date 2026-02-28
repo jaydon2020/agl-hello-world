@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'icipc_client.dart'; // Import the new FFI wrapper
 
 void main() {
   runApp(const MyApp());
@@ -37,6 +38,9 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isError = false;
   bool _showPicture = false; // Restored Picture State
 
+  // Create an instance of the icipc client for ALSA playback suspension
+  final IcipcClient _icipcClient = IcipcClient();
+
   // Direct communication with the native AGL C++ audio backend
   static const MethodChannel _audioChannel = MethodChannel(
     'xyz.luan/audioplayers',
@@ -59,6 +63,15 @@ class _MyHomePageState extends State<MyHomePage> {
     _setupEventHandlers();
     _initNativePlayer();
     _readAglVersion();
+
+    // Connect to the pipewire-ic-ipc socket
+    _icipcClient.connect();
+  }
+
+  @override
+  void dispose() {
+    _icipcClient.dispose();
+    super.dispose();
   }
 
   /// Silently absorb backend events so the C++ engine doesn't crash
@@ -144,59 +157,50 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   // ===========================================================================
-  // gRPC Control Plane + Native Media Playback (Data Plane)
-  // Demonstrating the modern AGL architecture shift (gRPC + PipeWire)
+  // IC IPC (pipewire-ic-ipc) + Native Media Playback (Data Plane)
+  // Demonstrating the AGL IC IPC suspend/resume mechanism
   // ===========================================================================
 
-  Future<void> _fetchVehicleSpeedViaGrpc() async {
-    setState(() {
-      _statusMessage = 'gRPC: Requesting Vehicle.Speed from Kuksa-VAL...';
-      _isError = false;
-    });
-
-    // In a full production AGL app, you would compile Kuksa-VAL proto files
-    // and use the dart grpc package to open an HTTP/2 channel to localhost:55555.
-    // For demonstration of the architectural IPC concept:
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    // Simulating a successful Kuksa gRPC response
-    setState(() {
-      _statusMessage = 'gRPC: Vehicle.Speed = 65 km/h';
-    });
-  }
-
-  void _playAudioDirectly() {
+  Future<void> _playAudioDirectly() async {
     // Determine the absolute path where AGL installs the Flutter bundle assets
-    // Or use a hardcoded path for the built image. We'll use the release folder.
     const String assetPath =
         '/usr/share/flutter/hello_world/3.38.3/release/data/flutter_assets/assets/sounds/notification.wav';
 
-    // Use GStreamer to push the audio directly to AGL's PipeWire server (Data Plane)
-    // By invoking `gst-launch-1.0`, we bypass Dart plugin mismatch issues entirely.
-    Process.run('gst-launch-1.0', [
-      'filesrc',
-      'location=$assetPath',
-      '!',
-      'decodebin',
-      '!',
-      'audioconvert',
-      '!',
-      'audioresample',
-      '!',
-      'pipewiresink',
-    ]).then((ProcessResult results) {
-      if (results.exitCode != 0) {
-        debugPrint('GStreamer Error: ${results.stderr}');
-      }
+    setState(() {
+      _statusMessage = 'IC IPC: Playing notification...';
+      _isError = false;
     });
+
+    // Use aplay to test direct ALSA playback (or GStreamer with alsasink)
+    // The requirement says: "IC Applications are expected to send SUSPEND...
+    // before starting playback of a sound to their dedicated ALSA device."
+    final result = await Process.run('aplay', [assetPath]);
+
+    if (result.exitCode != 0) {
+      debugPrint('aplay Error: ${result.stderr}');
+      setState(() {
+        _statusMessage = 'aplay Error: ${result.stderr}';
+        _isError = true;
+      });
+    } else {
+      setState(() {
+        _statusMessage = 'IC IPC: Notification played successfully!';
+      });
+    }
   }
 
   void _onNotificationPressed() async {
-    // 1. Exercise Native AGL API (Control Plane: gRPC to Kuksa-VAL)
-    await _fetchVehicleSpeedViaGrpc();
+    // 1. Send SUSPEND to PipeWire via pipewire-ic-ipc to mute other audio
+    _icipcClient.suspend();
 
-    // 2. Play the sound (Data Plane: Native GStreamer / PipeWire)
-    _playAudioDirectly();
+    // Slight delay to allow PipeWire metadata to propagate and WirePlumber to act
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // 2. Play the sound natively to the ALSA device
+    await _playAudioDirectly();
+
+    // 3. Send RESUME to PipeWire
+    _icipcClient.resume();
   }
 
   @override
